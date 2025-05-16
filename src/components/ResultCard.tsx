@@ -11,6 +11,29 @@ interface ResultCardProps {
   };
 }
 
+// Add this simple modal component inside the same file (or import from elsewhere)
+const Modal: React.FC<{ message: string; onClose: () => void }> = ({
+  message,
+  onClose,
+}) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="bg-white dark:bg-blue-900 border dark:border-blue-900 rounded-xl shadow-2xl p-8 max-w-xs w-full flex flex-col items-center">
+      <div className="text-red-600 dark:text-red-400 text-lg font-semibold mb-4">
+        Error
+      </div>
+      <div className="text-gray-800 dark:text-gray-200 mb-6 text-center">
+        {message}
+      </div>
+      <button
+        onClick={onClose}
+        className="px-6 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-700 transition"
+      >
+        Close
+      </button>
+    </div>
+  </div>
+);
+
 const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
   const [result, setResult] = useState(initialResult);
   const [editedCourses, setEditedCourses] = useState<{
@@ -22,6 +45,7 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
   const [bulkError, setBulkError] = useState("");
   const [excluded, setExcluded] = useState<{ [key: number]: boolean }>({});
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
 
   const enterAnimation = "animate-fade-in-up";
 
@@ -138,11 +162,11 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
     const credits = parseFloat(bulkCredits);
     const cgpa = parseFloat(bulkCgpa);
     if (isNaN(credits) || credits <= 0) {
-      setBulkError("Credits must be a positive number");
+      setModalError("Credits must be a positive number");
       return;
     }
     if (isNaN(cgpa) || cgpa < 0 || cgpa > 4.0) {
-      setBulkError("CGPA must be between 0 and 4.0");
+      setModalError("CGPA must be between 0 and 4.0");
       return;
     }
     setResult({
@@ -170,6 +194,10 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
     <div
       className={`bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden transition-all duration-300 ${enterAnimation}`}
     >
+      {/* Modal for errors */}
+      {modalError && (
+        <Modal message={modalError} onClose={() => setModalError(null)} />
+      )}
       <div className="p-6">
         <div className="flex items-start justify-between">
           <h2 className="text-xl font-semibold mb-4">Your Results</h2>
@@ -219,12 +247,12 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
                   onClick={recalculateCGPA}
                   disabled={isRecalculating}
                   className={`flex items-center gap-2 px-5 py-2 text-base font-bold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-xl shadow-lg transition-all border-2 border-blue-400 dark:border-blue-700 ${
-                  isRecalculating ? "opacity-80" : ""
+                    isRecalculating ? "opacity-80" : ""
                   }`}
                 >
                   <RefreshCw
-                  size={20}
-                  className={isRecalculating ? "animate-spin" : ""}
+                    size={20}
+                    className={isRecalculating ? "animate-spin" : ""}
                   />
                   <span>Recalculate CGPA</span>
                 </button>
@@ -239,10 +267,10 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
               </div>
             </div>
             {/* Bulk CGPA Entry moved below Course Breakdown heading but above course list */}
-            <div className="mb-6 flex flex-col md:flex-row md:items-center gap-3 md:gap-4 dark:from-blue-900/40 dark:via-purple-900/30 dark:to-blue-900/40 border rounded-xl p-5 shadow-lg">
+            <div className="mb-6 flex flex-col md:flex-row md:items-center gap-3 md:gap-4 dark:from-blue-900/40 dark:via-purple-900/30 dark:to-blue-900/40 border border-blue-400 dark:border-gray-600 rounded-xl p-5 shadow-lg">
               <div className="flex items-center gap-2 w-full md:w-auto">
                 <span className="font-semibold text-blue-800 dark:text-blue-200 text-base">
-                  Add Bulk CGPA Entry
+                  Add Manual CGPA Entry
                 </span>
               </div>
               <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
@@ -269,13 +297,14 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
                   className="w-28 text-center bg-white dark:bg-gray-900 border-2 border-blue-300 dark:border-blue-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800 rounded-lg px-3 py-2 text-base transition font-medium shadow-sm"
                 />
               </div>
-              <button
+                <div className="flex-1" />
+                <button
                 onClick={handleAddBulkCgpa}
                 className="flex items-center gap-2 px-5 py-2 text-base font-bold text-white bg-blue-800 hover:from-purple-700 hover:to-blue-700 dark:from-purple-500 dark:to-blue-500 dark:hover:from-purple-600 dark:hover:to-blue-600 rounded-xl shadow-lg transition-all border-2 border-purple-400 dark:border-blue-700"
-              >
+                >
                 <Plus size={20} />
-                Add Bulk CGPA
-              </button>
+                Add CGPA
+                </button>
               {bulkError && (
                 <span className="text-xs text-red-500 ml-2">{bulkError}</span>
               )}

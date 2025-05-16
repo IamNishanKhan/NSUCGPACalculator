@@ -1,14 +1,10 @@
 import React, { useState } from "react";
-import {
-  Check,
-  AlertTriangle,
-  Download,
-  PlusCircle,
-} from "lucide-react";
+import { Check, AlertTriangle, Download, PlusCircle } from "lucide-react";
 import FileUpload from "./FileUpload";
 import ResultCard from "./ResultCard";
 import { calculateCgpaFromCsv } from "../utils/cgpaCalculator";
 import { CourseResult } from "../types";
+import * as XLSX from "xlsx";
 
 const CGPACalculator: React.FC = () => {
   const [result, setResult] = useState<{
@@ -26,30 +22,62 @@ const CGPACalculator: React.FC = () => {
     setFileName(file.name);
 
     try {
-      const reader = new FileReader();
+      if (
+        file.name.endsWith(".xlsx") ||
+        file.name.endsWith(".xls") ||
+        file.type ===
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+        file.type === "application/vnd.ms-excel"
+      ) {
+        // Excel file
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const data = new Uint8Array(event.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: "array" });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+            const { cgpa, totalCredits, courses } =
+              calculateCgpaFromCsv(csvText);
 
-      reader.onload = (event) => {
-        try {
-          const csvText = event.target?.result as string;
-          const { cgpa, totalCredits, courses } = calculateCgpaFromCsv(csvText);
-
-          // Simulate processing time for better UX
-          setTimeout(() => {
-            setResult({ cgpa, totalCredits, courses });
+            setTimeout(() => {
+              setResult({ cgpa, totalCredits, courses });
+              setIsProcessing(false);
+            }, 800);
+          } catch (err) {
+            setError((err as Error).message || "Failed to process Excel file");
             setIsProcessing(false);
-          }, 800);
-        } catch (err) {
-          setError((err as Error).message || "Failed to process CSV data");
+          }
+        };
+        reader.onerror = () => {
+          setError("Failed to read file");
           setIsProcessing(false);
-        }
-      };
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        // CSV file
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const csvText = event.target?.result as string;
+            const { cgpa, totalCredits, courses } =
+              calculateCgpaFromCsv(csvText);
 
-      reader.onerror = () => {
-        setError("Failed to read file");
-        setIsProcessing(false);
-      };
-
-      reader.readAsText(file);
+            setTimeout(() => {
+              setResult({ cgpa, totalCredits, courses });
+              setIsProcessing(false);
+            }, 800);
+          } catch (err) {
+            setError((err as Error).message || "Failed to process CSV data");
+            setIsProcessing(false);
+          }
+        };
+        reader.onerror = () => {
+          setError("Failed to read file");
+          setIsProcessing(false);
+        };
+        reader.readAsText(file);
+      }
     } catch (err) {
       setError((err as Error).message || "An unexpected error occurred");
       setIsProcessing(false);
@@ -88,7 +116,7 @@ const CGPACalculator: React.FC = () => {
               className="mt-2 sm:mt-0 flex items-center text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors"
             >
               <Download size={16} className="mr-1" />
-              Download Template
+              Download Example CSV / Excel
             </button>
           </div>
 
