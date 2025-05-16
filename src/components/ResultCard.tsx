@@ -1,11 +1,5 @@
 import React, { useState } from "react";
-import {
-  BarChart,
-  ChevronDown,
-  ChevronUp,
-  Award,
-  RefreshCw,
-} from "lucide-react";
+import { BarChart, Award, RefreshCw, Plus, PlusCircle, X } from "lucide-react";
 import { CourseResult } from "../types";
 import { getGradePoint } from "../utils/cgpaCalculator";
 
@@ -19,11 +13,15 @@ interface ResultCardProps {
 
 const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
   const [result, setResult] = useState(initialResult);
-  const [showDetails, setShowDetails] = useState(false);
   const [editedCourses, setEditedCourses] = useState<{
     [key: string]: boolean;
   }>({});
   const [gradeErrors, setGradeErrors] = useState<{ [key: string]: string }>({});
+  const [bulkCredits, setBulkCredits] = useState("");
+  const [bulkCgpa, setBulkCgpa] = useState("");
+  const [bulkError, setBulkError] = useState("");
+  const [excluded, setExcluded] = useState<{ [key: number]: boolean }>({});
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const enterAnimation = "animate-fade-in-up";
 
@@ -72,47 +70,100 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
   };
 
   const recalculateCGPA = () => {
-    let totalPoints = 0;
-    let totalCredits = 0;
-    const newCourses = [...result.courses];
-    const newGradeErrors: { [key: string]: string } = {};
-    let hasError = false;
+    setIsRecalculating(true);
+    setTimeout(() => {
+      let totalPoints = 0;
+      let totalCredits = 0;
+      const newCourses = [...result.courses];
+      const newGradeErrors: { [key: string]: string } = {};
+      let hasError = false;
 
-    newCourses.forEach((course, idx) => {
-      // Validate credits
-      const credits = parseFloat(String(course.credits));
-      if (isNaN(credits) || credits <= 0) {
-        newGradeErrors[idx] = "Invalid credits";
-        hasError = true;
+      newCourses.forEach((course, idx) => {
+        if (excluded[idx]) return;
+
+        // Validate credits
+        const credits = parseFloat(String(course.credits));
+        if (isNaN(credits) || credits <= 0) {
+          newGradeErrors[idx] = "Invalid credits";
+          hasError = true;
+          return;
+        }
+        // Validate grade
+        try {
+          const gradePoint = getGradePoint(course.grade);
+          newCourses[idx].gradePoint = gradePoint;
+          newCourses[idx].credits = credits;
+        } catch {
+          newGradeErrors[idx] = "Invalid grade";
+          hasError = true;
+          return;
+        }
+        totalPoints += newCourses[idx].gradePoint * credits;
+        totalCredits += credits;
+      });
+
+      setGradeErrors(newGradeErrors);
+
+      if (hasError) {
+        setIsRecalculating(false);
         return;
       }
-      // Validate grade
-      try {
-        const gradePoint = getGradePoint(course.grade);
-        newCourses[idx].gradePoint = gradePoint;
-        newCourses[idx].credits = credits;
-        // No error
-      } catch {
-        newGradeErrors[idx] = "Invalid grade";
-        hasError = true;
-        return;
-      }
-      totalPoints += newCourses[idx].gradePoint * credits;
-      totalCredits += credits;
-    });
 
-    setGradeErrors(newGradeErrors);
+      const newCgpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+      setResult({
+        ...result,
+        cgpa: newCgpa,
+        totalCredits,
+        courses: newCourses,
+      });
+      setEditedCourses({});
+      setIsRecalculating(false);
+    }, 600); // Animation duration
+  };
 
-    if (hasError) return;
-
-    const newCgpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+  const handleAddCourse = () => {
     setResult({
       ...result,
-      cgpa: newCgpa,
-      totalCredits,
-      courses: newCourses,
+      courses: [
+        { name: "", grade: "", credits: 0, gradePoint: 0 },
+        ...result.courses,
+      ],
     });
-    setEditedCourses({});
+    // The new course is at index 0
+    setEditedCourses({ ...editedCourses, 0: true });
+  };
+
+  const handleAddBulkCgpa = () => {
+    setBulkError("");
+    const credits = parseFloat(bulkCredits);
+    const cgpa = parseFloat(bulkCgpa);
+    if (isNaN(credits) || credits <= 0) {
+      setBulkError("Credits must be a positive number");
+      return;
+    }
+    if (isNaN(cgpa) || cgpa < 0 || cgpa > 4.0) {
+      setBulkError("CGPA must be between 0 and 4.0");
+      return;
+    }
+    setResult({
+      ...result,
+      courses: [
+        ...result.courses,
+        {
+          name: "Bulk CGPA Entry",
+          grade: cgpa.toFixed(2),
+          credits,
+          gradePoint: cgpa,
+        },
+      ],
+    });
+    setEditedCourses({ ...editedCourses, [result.courses.length]: true });
+    setBulkCredits("");
+    setBulkCgpa("");
+  };
+
+  const handleExcludeCourse = (index: number) => {
+    setExcluded({ ...excluded, [index]: true });
   };
 
   return (
@@ -157,52 +208,102 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="w-full mt-6 flex items-center justify-center gap-2 p-2 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
-        >
-          {showDetails ? "Hide Details" : "Show Details"}
-          {showDetails ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-
-        {showDetails && (
-          <div className="mt-4 overflow-hidden animate-fade-in transition-all duration-300">
-            <div className="border-t dark:border-gray-700 pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-medium">Course Breakdown</h3>
-                {Object.keys(editedCourses).length > 0 && (
-                  <button
-                    onClick={recalculateCGPA}
-                    className="flex items-center gap-1 px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                  >
-                    <RefreshCw size={14} className="animate-spin-slow" />
-                    <span>Recalculate CGPA</span>
-                  </button>
-                )}
+        {/* Always show course breakdown */}
+        <div className="mt-4 overflow-hidden animate-fade-in transition-all duration-300">
+          <div className="border-t dark:border-gray-700 pt-4">
+            {/* Add Course Button */}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-medium">Course Breakdown</h3>
+              <div className="flex gap-2">
+                <button
+                  onClick={recalculateCGPA}
+                  disabled={isRecalculating}
+                  className={`flex items-center gap-2 px-5 py-2 text-base font-bold text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 rounded-xl shadow-lg transition-all border-2 border-blue-400 dark:border-blue-700 ${
+                  isRecalculating ? "opacity-80" : ""
+                  }`}
+                >
+                  <RefreshCw
+                  size={20}
+                  className={isRecalculating ? "animate-spin" : ""}
+                  />
+                  <span>Recalculate CGPA</span>
+                </button>
+                <button
+                  onClick={handleAddCourse}
+                  className="flex items-center gap-1 px-2 py-1 text-base text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/60 rounded-lg transition-colors font-semibold shadow"
+                  title="Add new course"
+                >
+                  <PlusCircle size={20} />
+                  Add Course
+                </button>
               </div>
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                  <thead>
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Course
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Grade
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        {/* Empty header for error column */}
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Credits
-                      </th>
-                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                        Points
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {result.courses.map((course, index) => (
+            </div>
+            {/* Bulk CGPA Entry moved below Course Breakdown heading but above course list */}
+            <div className="mb-6 flex flex-col md:flex-row md:items-center gap-3 md:gap-4 dark:from-blue-900/40 dark:via-purple-900/30 dark:to-blue-900/40 border rounded-xl p-5 shadow-lg">
+              <div className="flex items-center gap-2 w-full md:w-auto">
+                <span className="font-semibold text-blue-800 dark:text-blue-200 text-base">
+                  Add Bulk CGPA Entry
+                </span>
+              </div>
+              <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  value={bulkCredits}
+                  onChange={(e) => setBulkCredits(e.target.value)}
+                  placeholder="Total Credits"
+                  className="w-36 text-center bg-white dark:bg-gray-900 border-2 border-blue-300 dark:border-blue-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800 rounded-lg px-3 py-2 text-base transition font-medium shadow-sm"
+                />
+                <span className="self-center text-gray-600 dark:text-gray-300 font-medium">
+                  with CGPA
+                </span>
+                <input
+                  type="number"
+                  min="0"
+                  max="4"
+                  step="0.01"
+                  value={bulkCgpa}
+                  onChange={(e) => setBulkCgpa(e.target.value)}
+                  placeholder="CGPA"
+                  className="w-28 text-center bg-white dark:bg-gray-900 border-2 border-blue-300 dark:border-blue-700 focus:border-purple-500 focus:ring-2 focus:ring-purple-200 dark:focus:ring-purple-800 rounded-lg px-3 py-2 text-base transition font-medium shadow-sm"
+                />
+              </div>
+              <button
+                onClick={handleAddBulkCgpa}
+                className="flex items-center gap-2 px-5 py-2 text-base font-bold text-white bg-blue-800 hover:from-purple-700 hover:to-blue-700 dark:from-purple-500 dark:to-blue-500 dark:hover:from-purple-600 dark:hover:to-blue-600 rounded-xl shadow-lg transition-all border-2 border-purple-400 dark:border-blue-700"
+              >
+                <Plus size={20} />
+                Add Bulk CGPA
+              </button>
+              {bulkError && (
+                <span className="text-xs text-red-500 ml-2">{bulkError}</span>
+              )}
+            </div>
+            {/* Course List Table */}
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead>
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Course
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Grade
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"></th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Credits
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      Points
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {result.courses.map((course, index) =>
+                    excluded[index] ? null : (
                       <tr
                         key={index}
                         className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
@@ -214,7 +315,8 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
                             onChange={(e) =>
                               handleCourseChange(index, "name", e.target.value)
                             }
-                            className="w-full bg-transparent border-0 focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 text-sm"
+                            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 rounded px-2 py-1 text-sm transition"
+                            placeholder="Course Name"
                           />
                         </td>
                         <td className="px-4 py-3 text-center align-middle">
@@ -224,12 +326,12 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
                             onChange={(e) =>
                               handleCourseChange(index, "grade", e.target.value)
                             }
-                            className={`w-20 text-center bg-transparent border-0 focus:ring-2 rounded px-2 py-1 text-sm ${
+                            className={`w-20 text-center bg-white dark:bg-gray-900 border ${
                               gradeErrors[index]
-                                ? "border border-red-500 focus:ring-red-500"
-                                : "focus:ring-blue-500"
-                            }`}
-                            placeholder="A, B+, C..."
+                                ? "border-red-500 focus:ring-red-500"
+                                : "border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:ring-blue-200 dark:focus:ring-blue-800"
+                            } focus:ring-2 rounded px-2 py-1 text-sm transition`}
+                            placeholder="A, A-, B"
                           />
                         </td>
                         <td className="px-2 py-3 text-left align-middle w-32">
@@ -252,20 +354,31 @@ const ResultCard: React.FC<ResultCardProps> = ({ result: initialResult }) => {
                             }
                             min="0"
                             step="0.5"
-                            className="w-20 text-center bg-transparent border-0 focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 text-sm"
+                            className="w-20 text-center bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-800 rounded px-2 py-1 text-sm transition"
+                            placeholder="Credits"
                           />
                         </td>
                         <td className="px-4 py-3 text-sm text-center text-gray-900 dark:text-gray-100">
                           {(course.gradePoint * course.credits).toFixed(1)}
                         </td>
+                        <td className="px-2 py-3 text-center align-middle">
+                          <button
+                            type="button"
+                            onClick={() => handleExcludeCourse(index)}
+                            className="text-red-600 hover:bg-red-100 dark:hover:bg-red-900/40 rounded-full p-1.5 transition border border-red-200 dark:border-red-700 shadow-sm"
+                            title="Exclude this course"
+                          >
+                            <X size={20} />
+                          </button>
+                        </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    )
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

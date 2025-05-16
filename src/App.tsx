@@ -1,5 +1,3 @@
-import React from 'react';
-import { Github } from 'lucide-react';
 import Layout from './components/Layout';
 import CGPACalculator from './components/CGPACalculator';
 
@@ -15,13 +13,7 @@ function App() {
             Upload your course data CSV and get your CGPA instantly
           </p>
         </header>
-        
         <CGPACalculator />
-        
-        <footer className="mt-12 text-center text-sm text-gray-500 dark:text-gray-400 flex items-center justify-center gap-2">
-          <Github size={16} />
-          <span>Source code available on GitHub</span>
-        </footer>
       </div>
     </Layout>
   );
